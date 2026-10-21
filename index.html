@@ -1,18 +1,269 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ChatGPT Chatbox</title>
-    <link rel="stylesheet" href="styles.css"> <!-- Optional for styling -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="description" content="An animated eye made of binary digits. Move to look, click to blink.">
+<title>Binary Eye</title>
+<style>
+  :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; --accent:#d6a16b; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; width:100%; height:100%; overflow:hidden; background:#000; color:#e6e3dc; }
+  canvas { display:block; width:100%; height:100%; touch-action:none; outline:none; }
+  canvas:focus-visible { outline:1px solid #b38860; outline-offset:-3px; }
+  button,input { font:inherit; }
+  button { cursor:pointer; }
+  button:disabled { opacity:.4; cursor:default; }
+  button:focus-visible,input:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+  [hidden] { display:none !important; }
+  #hint { position:fixed; left:24px; right:100px; bottom:max(27px,env(safe-area-inset-bottom)); color:#77716a; font-size:12px; letter-spacing:.03em; pointer-events:none; transition:opacity 1.2s; }
+  #hint.faded { opacity:0; }
+  #controlsToggle { position:fixed; right:max(24px,env(safe-area-inset-right)); bottom:max(20px,env(safe-area-inset-bottom)); width:40px; height:40px; border:1px solid #302b26; border-radius:50%; color:#b5a48f; background:#0c0b0a; font-size:17px; opacity:.62; transition:opacity .2s,border-color .2s; }
+  #controlsToggle:hover,#controlsToggle:focus-visible,#controlsToggle[aria-expanded="true"] { opacity:1; border-color:#816245; }
+  #panel { position:fixed; right:max(24px,env(safe-area-inset-right)); bottom:76px; width:300px; max-height:calc(100dvh - 110px); overflow:auto; padding:23px; background:rgba(16,15,13,.97); border:1px solid #393027; border-radius:14px; box-shadow:0 15px 70px #000b; }
+  .top { display:flex; align-items:center; justify-content:space-between; margin-bottom:5px; }
+  h1 { font-size:16px; letter-spacing:.12em; font-weight:600; margin:0; }
+  #close { background:none; border:0; color:#a89c8e; padding:2px 7px; font-size:22px; }
+  .sub { font-size:12px; color:#8e8376; line-height:1.6; margin:0 0 20px; }
+  .row { display:flex; gap:8px; margin:12px 0; }
+  .action { border:1px solid #3b332a; background:#211d17; color:#e2d7c7; border-radius:7px; min-height:36px; padding:8px 12px; flex:1; font-size:12px; }
+  .action:hover:not(:disabled) { background:#33291e; border-color:#8b6c49; }
+  .label { display:block; text-transform:uppercase; letter-spacing:.11em; font-size:10px; color:#9b8c79; margin:19px 0 9px; }
+  .palette { display:flex; gap:7px; }
+  .palette button { border:1px solid #393129; background:transparent; border-radius:7px; padding:8px; color:#aca395; font-size:11px; flex:1; }
+  .palette button[aria-pressed="true"] { border-color:var(--accent); background:#292117; color:#f2e8db; }
+  .dot { display:inline-block; width:7px; height:7px; margin-right:5px; border-radius:50%; background:var(--color); }
+  .setting { display:flex; align-items:center; justify-content:space-between; margin:17px 0; font-size:12px; color:#bcb2a3; gap:12px; }
+  input[type="checkbox"] { width:16px; height:16px; accent-color:var(--accent); }
+  input[type="range"] { width:100%; accent-color:var(--accent); margin:2px 0 0; }
+  output { color:#d7b891; font-variant-numeric:tabular-nums; }
+  .keys { padding-top:14px; margin:17px 0 0; border-top:1px solid #2d2720; font-size:10px; color:#8c8171; line-height:2; }
+  kbd { font:inherit; color:#d5c3aa; }
+  #notice { position:fixed; top:20px; left:50%; transform:translateX(-50%); padding:10px 18px; border:1px solid #51402d; border-radius:8px; color:#dbc6a7; background:#17130e; font-size:12px; max-width:90%; }
+  @media(max-width:440px) { #panel { right:15px; bottom:74px; width:calc(100% - 30px); padding:20px; } #hint { left:18px; font-size:11px; } #controlsToggle { right:18px; } }
+</style>
 </head>
 <body>
-    <div id="chatbox">
-        <div id="chatlog"></div>
-        <input type="text" id="userInput" placeholder="Type your message...">
-        <button id="sendBtn">Send</button>
-    </div>
-
-    <script src="script.js"></script>
+<canvas id="eye" tabindex="0" aria-label="Animated binary eye. Move the pointer to guide its gaze. Click to blink. Press F1 for controls.">Your browser needs Canvas support to display the eye.</canvas>
+<div id="hint">Move to look. Click to blink. <span aria-hidden="true">F1 for controls.</span></div>
+<button id="controlsToggle" type="button" aria-label="Show controls" aria-expanded="false" aria-controls="panel">?</button>
+<section id="panel" role="region" aria-label="Eye controls" hidden>
+  <div class="top"><h1>BINARY EYE</h1><button id="close" type="button" aria-label="Close controls">×</button></div>
+  <p class="sub">One eye. Thousands of bits.</p>
+  <div class="row"><button class="action" id="play" type="button">Pause</button><button class="action" id="blink" type="button">Blink</button></div>
+  <span class="label">Iris color</span>
+  <div class="palette" role="group" aria-label="Iris color">
+    <button type="button" data-theme="0" aria-pressed="true"><span class="dot" style="--color:#c0864d"></span>Copper</button>
+    <button type="button" data-theme="1" aria-pressed="false"><span class="dot" style="--color:#54bbc9"></span>Blue</button>
+    <button type="button" data-theme="2" aria-pressed="false"><span class="dot" style="--color:#6aba73"></span>Green</button>
+  </div>
+  <label class="setting" for="tracking">Follow the pointer<input id="tracking" type="checkbox" checked></label>
+  <label class="setting" for="detail">Fine binary detail<input id="detail" type="checkbox"></label>
+  <label class="setting" for="zoom">Zoom <output id="zoomValue" for="zoom">100%</output></label>
+  <input id="zoom" type="range" min="55" max="125" value="100" step="1" aria-label="Eye zoom">
+  <div class="row"><button class="action" id="fullscreen" type="button">Fullscreen</button><button class="action" id="reset" type="button">Reset</button></div>
+  <p class="keys"><kbd>Space</kbd> Pause · <kbd>B</kbd> Blink · <kbd>C</kbd> Color<br><kbd>D</kbd> Detail · <kbd>M</kbd> Tracking · <kbd>F</kbd> Fullscreen<br><kbd>Home</kbd> Reset · <kbd>F1</kbd> Controls · Scroll to zoom</p>
+</section>
+<div id="notice" role="status" aria-live="polite" hidden></div>
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const canvas = $('eye');
+  const context = canvas.getContext('2d', { alpha: false });
+  if (!context) { $('hint').textContent = 'Canvas is unavailable in this browser.'; return; }
+  const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+  const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const state = { time: .8, paused: motionPreference.matches, theme: 0, tracking: true,
+    fine: false, zoom: 1, gx: 0, gy: 0, cx: 0, cy: 0, cursorTime: -100, blinkTime: -100 };
+  try {
+    const saved = JSON.parse(localStorage.getItem('binary-eye-preferences') || '{}');
+    if ([0, 1, 2].includes(saved.theme)) state.theme = saved.theme;
+    if (typeof saved.tracking === 'boolean') state.tracking = saved.tracking;
+    if (typeof saved.fine === 'boolean') state.fine = saved.fine;
+    if (Number.isFinite(saved.zoom)) state.zoom = clamp(saved.zoom, .55, 1.25);
+  } catch (_) { /* Local files can have restricted storage. */ }
+  function save() {
+    try { localStorage.setItem('binary-eye-preferences', JSON.stringify({ theme: state.theme,
+      tracking: state.tracking, fine: state.fine, zoom: state.zoom })); } catch (_) {}
+  }
+  let width = 1, height = 1, image, data, frame = 0, last = 0, lastDraw = 0, dirty = true;
+  let notifyTimer;
+  function notify(message) {
+    $('notice').textContent = message; $('notice').hidden = false;
+    clearTimeout(notifyTimer); notifyTimer = setTimeout(() => { $('notice').hidden = true; }, 3500);
+  }
+  function resize() {
+    const w = Math.max(1, window.innerWidth), h = Math.max(1, window.innerHeight);
+    const ratio = Math.min(window.devicePixelRatio || 1, 2, 1600 / w, 1000 / h);
+    width = Math.max(1, Math.round(w * ratio)); height = Math.max(1, Math.round(h * ratio));
+    canvas.width = width; canvas.height = height;
+    image = context.createImageData(width, height); data = image.data;
+    for (let i = 3; i < data.length; i += 4) data[i] = 255;
+    dirty = true;
+  }
+  function hash(value) {
+    value = (value ^ (value >>> 16)) >>> 0; value = Math.imul(value, 0x7feb352d);
+    value ^= value >>> 15; value = Math.imul(value, 0x846ca68b);
+    return (value ^ (value >>> 16)) >>> 0;
+  }
+  function blinkAmount() {
+    const phase = (state.time + 3.5) % 5.2, manual = state.time - state.blinkTime;
+    let value = phase < .28 ? Math.sin(phase * Math.PI / .28) ** 2 : 0;
+    if (manual >= 0 && manual < .30) value = Math.max(value, Math.sin(manual * Math.PI / .30) ** 2);
+    return value;
+  }
+  const rgb = [0, 0, 0];
+  function sample(x, y, shut) {
+    const a = x / 1.48, aa = Math.abs(a);
+    if (aa > 1.02) return false;
+    const curve = Math.max(0, 1 - a * a) ** .67, tilt = .045 * a;
+    const top = -.52 * curve * shut + tilt, bottom = .43 * curve * shut + tilt;
+    const upper = Math.abs(y - top), lower = Math.abs(y - bottom), outer = Math.abs(y - (top - .10 * curve));
+    let r, g, b;
+    if (aa < 1 && upper < .034) { const v = 1 - upper / .034; r = 135 + 65 * v; g = 75 + 50 * v; b = 43 + 32 * v; }
+    else if (aa < 1 && lower < .028) { const v = 1 - lower / .028; r = 120 + 55 * v; g = 79 + 42 * v; b = 56 + 31 * v; }
+    else if (aa < .99 && outer < .018) { r = 62; g = 37; b = 26; }
+    else if (y > top && y < bottom && aa < 1) {
+      const edge = clamp(Math.min(y - top, bottom - y) / .09, .1, 1);
+      const sphere = Math.sqrt(Math.max(0, 1 - (x / 1.57) ** 2 - (y / .92) ** 2));
+      const diffuse = .35 + .65 * sphere;
+      r = 213 * diffuse * edge; g = 222 * diffuse * edge; b = 210 * diffuse * edge;
+      const ix = (x - state.gx) / (1 - .16 * Math.abs(state.gx)), iy = y - state.gy;
+      const rad = Math.sqrt(ix * ix + iy * iy), angle = Math.atan2(iy, ix);
+      if (rad < .485) {
+        const q = rad / .485;
+        const strands = .5 + .18 * Math.sin(angle * 73 + q * 11) + .15 * Math.sin(angle * 119 - q * 19) + .10 * Math.sin(angle * 37 + q * 31);
+        const flecks = .5 + .5 * Math.sin(angle * 53 + Math.sin(q * 26) * 1.6);
+        const radial = .62 + .38 * Math.sin(q * Math.PI), limbal = clamp((1 - q) / .095, .12, 1);
+        const v = (.49 + .91 * strands) * radial * limbal * edge;
+        if (state.theme === 0) { r = (170 + 69 * flecks) * v; g = (85 + 65 * flecks) * v; b = (37 + 27 * flecks) * v; }
+        else if (state.theme === 1) { r = 53 * v; g = (153 + 76 * flecks) * v; b = (185 + 65 * flecks) * v; }
+        else { r = 68 * v; g = (175 + 66 * flecks) * v; b = (87 + 35 * flecks) * v; }
+        const pupil = .182 + .009 * Math.sin(state.time * .91);
+        if (rad < pupil) { r = 2; g = 3; b = 3; }
+        else if (rad < pupil + .025) { const t = .24 + .76 * (rad - pupil) / .025; r *= t; g *= t; b *= t; }
+        const highlight = ((ix + .14) / .078) ** 2 + ((iy + .19) / .061) ** 2;
+        const glint = ((ix - .12) / .032) ** 2 + ((iy - .17) / .026) ** 2;
+        if (highlight < 1) { const h = 1 - highlight * .32; r = 242 * h * edge; g = 250 * h * edge; b = 244 * h * edge; }
+        else if (glint < 1) { r = 163 * edge; g = 180 * edge; b = 166 * edge; }
+      }
+    } else return false;
+    rgb[0] = r; rgb[1] = g; rgb[2] = b; return true;
+  }
+  function pixel(x, y, r, g, b) {
+    if (x < 0 || y < 0 || x >= width || y >= height) return;
+    const at = (y * width + x) * 4;
+    data[at] += Math.trunc(r); data[at + 1] += Math.trunc(g); data[at + 2] += Math.trunc(b);
+  }
+  const glyphs = [[7, 5, 5, 5, 7], [2, 6, 2, 2, 7]];
+  function digit(x, y, scale, bit, r, g, b) {
+    const glyph = glyphs[bit];
+    for (let row = 0; row < 5; row++) for (let col = 0; col < 3; col++) if (glyph[row] & (4 >> col)) {
+      for (let yy = 0; yy < scale; yy++) for (let xx = 0; xx < scale; xx++) {
+        const px = x + col * scale + xx, py = y + row * scale + yy;
+        pixel(px - 1, py, r * .035, g * .035, b * .035);
+        pixel(px + 1, py, r * .035, g * .035, b * .035);
+        pixel(px, py, r, g, b);
+      }
+    }
+  }
+  function render() {
+    for (let i = 0; i < data.length; i += 4) { data[i] = data[i + 1] = data[i + 2] = 0; }
+    const base = Math.min(width / 1120, height / 700);
+    const scale = Math.max(1, Math.round(base * (state.fine ? 1 : 2)));
+    const cw = 4 * scale, ch = 6 * scale;
+    const factor = Math.min(width / 3.48, height / 1.65) * state.zoom;
+    const tick = Math.floor(state.time * 9), shut = 1 - blinkAmount();
+    for (let y = 0; y < height; y += ch) for (let x = 0; x < width; x += cw) {
+      if (sample((x + cw * .5 - width * .5) / factor, (y + ch * .5 - height * .5) / factor, shut)) {
+        const h = hash(x / cw + y / ch * 977 + Math.floor(tick / 4) * 31);
+        const flicker = .84 + .16 * ((h >>> 8) & 255) / 255;
+        digit(x, y, scale, (h ^ tick) & 1, rgb[0] * flicker, rgb[1] * flicker, rgb[2] * flicker);
+      }
+    }
+    context.putImageData(image, 0, 0); dirty = false;
+  }
+  function animate(dt) {
+    if (state.paused) return;
+    state.time += dt;
+    let tx = .30 * Math.sin(state.time * .69) + .07 * Math.sin(state.time * 1.71);
+    let ty = .075 * Math.sin(state.time * .48);
+    if (state.tracking && state.time - state.cursorTime < 2.5) { tx = state.cx * .40; ty = state.cy * .17; }
+    const smooth = 1 - Math.exp(-dt * 7);
+    state.gx += (tx - state.gx) * smooth; state.gy += (ty - state.gy) * smooth;
+  }
+  function loop(now) {
+    frame = 0;
+    const dt = Math.min(last ? (now - last) / 1000 : 0, .08); last = now;
+    animate(dt);
+    if (dirty || (!state.paused && now - lastDraw >= 1000 / 30)) { render(); lastDraw = now; }
+    if (!document.hidden && !state.paused) frame = requestAnimationFrame(loop);
+  }
+  function wake() { dirty = true; if (!frame && !document.hidden) frame = requestAnimationFrame(loop); }
+  function sync() {
+    $('play').textContent = state.paused ? 'Play' : 'Pause'; $('play').setAttribute('aria-pressed', String(state.paused));
+    $('blink').disabled = state.paused;
+    $('tracking').checked = state.tracking; $('detail').checked = state.fine;
+    $('zoom').value = Math.round(state.zoom * 100); $('zoomValue').textContent = Math.round(state.zoom * 100) + '%';
+    document.querySelectorAll('[data-theme]').forEach(button => button.setAttribute('aria-pressed', String(Number(button.dataset.theme) === state.theme)));
+  }
+  function change(fn) { fn(); sync(); save(); wake(); }
+  function pause() { state.paused = !state.paused; last = 0; sync(); wake(); }
+  function blink() { if (!state.paused) { state.blinkTime = state.time; wake(); } }
+  function reset() { change(() => Object.assign(state, { theme: 0, tracking: true, fine: false, zoom: 1, gx: 0, gy: 0, cursorTime: -100 })); }
+  function panel(open = $('panel').hidden) {
+    $('panel').hidden = !open; $('controlsToggle').setAttribute('aria-expanded', String(open));
+    $('controlsToggle').setAttribute('aria-label', open ? 'Hide controls' : 'Show controls');
+    if (open) $('play').focus(); else $('controlsToggle').focus();
+  }
+  async function fullscreen() {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen();
+      else notify('Use your browser fullscreen option.');
+    } catch (_) { notify('Use F11 or your browser fullscreen option.'); }
+  }
+  function follow(event) {
+    state.cx = clamp(event.clientX / Math.max(1, window.innerWidth) * 2 - 1, -1, 1);
+    state.cy = clamp(event.clientY / Math.max(1, window.innerHeight) * 2 - 1, -1, 1);
+    state.cursorTime = state.time;
+  }
+  canvas.addEventListener('pointermove', follow, { passive: true });
+  canvas.addEventListener('pointerdown', event => { follow(event); canvas.focus({ preventScroll: true }); blink(); });
+  canvas.addEventListener('dblclick', fullscreen);
+  canvas.addEventListener('wheel', event => { event.preventDefault(); change(() => { state.zoom = clamp(state.zoom - event.deltaY * .0006, .55, 1.25); }); }, { passive: false });
+  $('controlsToggle').addEventListener('click', () => panel()); $('close').addEventListener('click', () => panel(false));
+  $('play').addEventListener('click', pause); $('blink').addEventListener('click', blink);
+  $('fullscreen').addEventListener('click', fullscreen); $('reset').addEventListener('click', reset);
+  $('tracking').addEventListener('change', event => change(() => { state.tracking = event.target.checked; }));
+  $('detail').addEventListener('change', event => change(() => { state.fine = event.target.checked; }));
+  $('zoom').addEventListener('input', event => change(() => { state.zoom = Number(event.target.value) / 100; }));
+  document.querySelectorAll('[data-theme]').forEach(button => button.addEventListener('click', () => change(() => { state.theme = Number(button.dataset.theme); })));
+  document.addEventListener('keydown', event => {
+    if (event.ctrlKey || event.metaKey || event.altKey || event.repeat) return;
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName)) return;
+    const key = event.key.toLowerCase();
+    if (event.key === 'F1' || key === '?') { event.preventDefault(); panel(); }
+    else if (event.key === 'Escape' && !$('panel').hidden) panel(false);
+    else if (event.code === 'Space' && event.target.tagName !== 'BUTTON') { event.preventDefault(); pause(); }
+    else if (key === 'b') blink();
+    else if (key === 'c') change(() => { state.theme = (state.theme + 1) % 3; });
+    else if (key === 'd') change(() => { state.fine = !state.fine; });
+    else if (key === 'm') change(() => { state.tracking = !state.tracking; });
+    else if (key === 'f') fullscreen();
+    else if (event.key === 'Home') { event.preventDefault(); reset(); }
+  });
+  window.addEventListener('resize', () => { resize(); wake(); });
+  document.addEventListener('visibilitychange', () => {
+    last = 0;
+    if (document.hidden) { if (frame) cancelAnimationFrame(frame); frame = 0; }
+    else wake();
+  });
+  setTimeout(() => $('hint').classList.add('faded'), 6500);
+  resize(); sync(); render(); wake();
+})();
+</script>
 </body>
 </html>
